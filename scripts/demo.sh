@@ -17,16 +17,19 @@ curl -fsS "$BASE_URL/health"
 echo
 
 mk() { # file id seq side
-  printf '@%s/%s desc\n%s\n+\n%s\n' "$2" "$4" "$3" "$(printf '~%.0s' $(seq ${#3}))" >> "$1"
+  # 'I' is Phred+33 score 40, the top of the accepted 0-40 quality window.
+  printf '@%s/%s desc\n%s\n+\n%s\n' "$2" "$4" "$3" "$(printf 'I%.0s' $(seq ${#3}))" >> "$1"
 }
 
-echo "== generating shuffled R1/R2 =="
+echo "== generating shuffled R1/R2 (40-bp ACGT reads) =="
 R1="$WORK/R1.fastq"; R2="$WORK/R2.fastq"
+SEQ1="$(python3 -c 'print("ACGT" * 10, end="")')"   # 40 bp
+SEQ2="$(python3 -c 'print("TGCA" * 10, end="")')"   # 40 bp
 for id in alpha beta gamma delta epsilon; do
-  mk "$R1" "$id" "ACGTACGTAC" 1
+  mk "$R1" "$id" "$SEQ1" 1
 done
 for id in epsilon gamma alpha delta beta; do   # deliberately shuffled
-  mk "$R2" "$id" "TGCATGCATG" 2
+  mk "$R2" "$id" "$SEQ2" 2
 done
 
 echo "== upload =="
@@ -67,6 +70,37 @@ print("R1 ids:", ids[0])
 print("R2 ids:", ids[1])
 assert ids[0] == ids[1] == ["alpha", "beta", "gamma", "delta", "epsilon"]
 print("OK: paired in R1 order")
+PY
+
+echo "== recalibrate the successful task against a reference =="
+python3 - "$WORK/manifest.json" <<'PY'
+import json, sys
+# 60-bp ACGT reference. R1 (40 bp, forward) covers 1..40; R2 (40 bp,
+# reverse) covers 21..60. The manifest ids match the uploaded read ids.
+ref = ("ACGTACGTAC" * 6)
+manifest = {
+    "reference": ref,
+    "manifest": [
+        {"read_id": rid, "r1_start": 1, "r1_strand": "+",
+         "r2_start": 21, "r2_strand": "-"}
+        for rid in ("alpha", "beta", "gamma", "delta", "epsilon")
+    ],
+}
+with open(sys.argv[1], "w") as fh:
+    json.dump(manifest, fh)
+PY
+curl -fsS -D "$WORK/recal_headers.txt" -X POST "$BASE_URL/tasks/$ID/recalibrate" \
+  -H 'Content-Type: application/json' \
+  --data @"$WORK/manifest.json" -o "$WORK/recal.zip"
+grep -iE 'HTTP/|x-effective|x-mismatch|x-recalibrated|x-score-applied|content-type' \
+  "$WORK/recal_headers.txt"
+python3 - "$WORK/recal.zip" <<'PY'
+import sys, zipfile
+zf = zipfile.ZipFile(sys.argv[1])
+assert zf.testzip() is None and sorted(zf.namelist()) == ["R1.fastq", "R2.fastq"]
+r1 = zf.read("R1.fastq").decode().splitlines()
+print("recalibrated R1 quality line:", r1[3])
+print("OK: ZIP contains rewritten R1.fastq and R2.fastq")
 PY
 
 echo "== malformed input is rejected as a whole task =="

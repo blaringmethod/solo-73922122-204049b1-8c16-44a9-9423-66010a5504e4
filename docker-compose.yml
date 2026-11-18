@@ -1,7 +1,7 @@
 services:
-  fastq-pairer:
+  fastq-service:
     build: .
-    image: fastq-pairer:1.0.0
+    image: fastq-qc-service:1.1.0
     ports:
       - "8000:8000"
     environment:
@@ -12,6 +12,11 @@ services:
       # process stays within the 256 MiB memory limit.
       FASTQ_SQLITE_CACHE_PAGES: "2048"
       FASTQ_INSERT_BATCH_SIZE: "512"
+      # Recalibration contract limits.
+      FASTQ_MAX_READ_PAIRS: "2000"
+      FASTQ_MIN_READ_LEN: "40"
+      FASTQ_MAX_READ_LEN: "200"
+      FASTQ_MAX_REF_BASES: "10000"
     volumes:
       - fastq-data:/data
     mem_limit: 256m

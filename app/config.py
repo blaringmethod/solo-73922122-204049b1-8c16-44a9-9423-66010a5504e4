@@ -41,3 +41,25 @@ STAGE_PARSE = "parse"
 STAGE_VALIDATE = "validate"
 STAGE_PUBLISH = "publish"
 STAGE_DONE = "done"
+
+# ---------------------------------------------------------------------------
+# Quality-score recalibration limits (all overridable via environment).
+# ---------------------------------------------------------------------------
+
+MAX_READ_PAIRS = int(os.environ.get("FASTQ_MAX_READ_PAIRS", 2000))
+"""Maximum number of read pairs accepted by the recalibration endpoint."""
+
+MIN_READ_LEN = int(os.environ.get("FASTQ_MIN_READ_LEN", 40))
+MAX_READ_LEN = int(os.environ.get("FASTQ_MAX_READ_LEN", 200))
+"""Per-end sequence length window (inclusive, ACGT bases only)."""
+
+MAX_REF_BASES = int(os.environ.get("FASTQ_MAX_REF_BASES", 10_000))
+"""Maximum reference length in bases."""
+
+PHRED_OFFSET = 33
+MIN_PHRED = 0
+MAX_PHRED = 40
+"""Accepted/recalibrated quality range for Phred+33 ('!'..'I')."""
+
+MIN_EFFECTIVE_SITES = int(os.environ.get("FASTQ_MIN_EFFECTIVE_SITES", 20))
+"""Effective sites required before the recalibrated score replaces originals."""
